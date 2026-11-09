@@ -1,4 +1,4 @@
-// Package httpx is the shared handler contract for every Reparix Go Function.
+// Package httpx is the shared typed-handler contract for Appwrite Go Functions.
 //
 //	func handler(ctx, req *Request) (*Response, error)
 //
@@ -47,6 +47,12 @@ func Conflict(msg string, params map[string]any) error {
 	return &Error{Status: 409, Code: "conflict", Message: msg, Params: params}
 }
 
+// PreconditionFailed reports a stale read/write, for example an optimistic
+// concurrency check on a quote decision that another request already applied.
+func PreconditionFailed(msg string, params map[string]any) error {
+	return &Error{Status: 412, Code: "precondition_failed", Message: msg, Params: params}
+}
+
 // Upstream marks a dependency (Appwrite, a provider API) as failing.
 func Upstream(msg string, params map[string]any) error {
 	return &Error{Status: 502, Code: "upstream_error", Message: msg, Params: params}
@@ -83,6 +89,11 @@ func Handle[Req any, Res any](ctx openruntimes.Context, h Handler[Req, Res]) ope
 }
 
 // Fail converts any error into the standard JSON error body.
+//
+// Domain errors are rendered as-is. Any other error is treated as an internal
+// failure: the raw detail is logged privately through ctx.Error and only a
+// generic body is returned, so dependency messages, SQL, tokens or network
+// details never reach the client.
 func Fail(ctx openruntimes.Context, err error) openruntimes.Response {
 	var e *Error
 	if errors.As(err, &e) {
@@ -92,8 +103,9 @@ func Fail(ctx openruntimes.Context, err error) openruntimes.Response {
 		}
 		return ctx.Res.Json(body, ctx.Res.WithStatusCode(e.Status))
 	}
+	ctx.Error("unhandled error: " + err.Error())
 	return ctx.Res.Json(
-		map[string]any{"error": err.Error(), "code": "internal_error"},
+		map[string]any{"error": "internal server error", "code": "internal_error"},
 		ctx.Res.WithStatusCode(500),
 	)
 }
