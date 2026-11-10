@@ -20,7 +20,17 @@ import (
 
 // DefaultResponseFormat is the Appwrite API response format requested by the
 // client. It is a protocol version, not a project identifier.
-const DefaultResponseFormat = "2.6.1"
+//
+// Pinned to 1.8.0 deliberately: newer formats (2.6.1 confirmed live) serialise
+// row metadata such as `$sequence` as a JSON string, while the generated
+// sdk-for-go v1.0.0 models decode it as int, so every ListRows/GetRow decode
+// fails with "cannot unmarshal string into Go struct field Row.rows.$sequence".
+// 1.8.0 keeps the field numeric and matches the pinned SDK models.
+const DefaultResponseFormat = "1.8.0"
+
+// EnvResponseFormat lets a deployment override the response format without a
+// code change (for example after upgrading the SDK past the int/string break).
+const EnvResponseFormat = "APPWRITE_RESPONSE_FORMAT"
 
 // ResponseFormat is kept for compatibility with v0.1.x callers. New code
 // should set Config.ResponseFormat or rely on DefaultResponseFormat.
@@ -87,7 +97,7 @@ func (c Config) withDefaults() Config {
 	c.DatabaseID = strings.TrimSpace(c.DatabaseID)
 	c.APIKey = strings.TrimSpace(c.APIKey)
 	if strings.TrimSpace(c.ResponseFormat) == "" {
-		c.ResponseFormat = DefaultResponseFormat
+		c.ResponseFormat = firstNonEmpty(os.Getenv(EnvResponseFormat), DefaultResponseFormat)
 	}
 	return c
 }

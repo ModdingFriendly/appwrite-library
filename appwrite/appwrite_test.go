@@ -313,6 +313,7 @@ func TestConfigFromEnvReadsExplicitValues(t *testing.T) {
 	t.Setenv(appwrite.EnvProjectID, "")
 	t.Setenv(appwrite.EnvFunctionProjectID, "runtime-project")
 	t.Setenv(appwrite.EnvDatabaseID, "runtime-database")
+	t.Setenv(appwrite.EnvResponseFormat, "")
 
 	ctx := testContext()
 	ctx.Req.Headers = map[string]string{"X-Appwrite-Key": "runtime-key"}
@@ -329,6 +330,34 @@ func TestConfigFromEnvReadsExplicitValues(t *testing.T) {
 	}
 	if cfg.APIKey != "runtime-key" {
 		t.Fatalf("api key = %q", cfg.APIKey)
+	}
+}
+
+// TestResponseFormatStaysDecodable pins the format the SDK models were
+// generated for. Appwrite 2.6.1 serialises `$sequence` as a JSON string while
+// sdk-for-go v1.0.0 decodes it as int, which breaks every row read.
+func TestResponseFormatStaysDecodable(t *testing.T) {
+	if appwrite.DefaultResponseFormat != "1.8.0" {
+		t.Fatalf("DefaultResponseFormat = %q, want 1.8.0 (SDK-compatible)", appwrite.DefaultResponseFormat)
+	}
+	var seen string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Get("X-Appwrite-Response-Format")
+		assertHeader(t, r, "X-Appwrite-Response-Format", appwrite.DefaultResponseFormat)
+		writeJSON(w, http.StatusOK, `{"total":1,"rows":[{"$id":"row1","$sequence":1,"device":"iPhone","status":"New"}]}`)
+	}))
+	defer server.Close()
+
+	// Rows carry numeric $sequence at the pinned format; decoding must succeed.
+	page, err := appwrite.ListWith[ticket](testContext(), config(server.URL), "tickets")
+	if err != nil {
+		t.Fatalf("ListWith: %v", err)
+	}
+	if len(page.Rows) != 1 || page.Rows[0].Device != "iPhone" {
+		t.Fatalf("page = %#v", page)
+	}
+	if seen != appwrite.DefaultResponseFormat {
+		t.Fatalf("header = %q, want %q", seen, appwrite.DefaultResponseFormat)
 	}
 }
 
