@@ -126,8 +126,12 @@ func TestMoneyComparisonAndSigns(t *testing.T) {
 		t.Error("zero not detected")
 	}
 	refund := MustParseMoney("GBP -3.50")
-	if !refund.IsNegative() || AbsMoney(refund).String() != "GBP 3.50" {
-		t.Errorf("negative handling: %v", refund)
+	absolute, err := AbsMoney(refund)
+	if err != nil || absolute.String() != "GBP 3.50" {
+		t.Errorf("negative handling: %v %v", absolute, err)
+	}
+	if !refund.IsNegative() {
+		t.Errorf("refund not detected as negative: %v", refund)
 	}
 	negated, err := NegMoney(MustParseMoney("GBP 2.00"))
 	if err != nil || negated.String() != "GBP -2.00" {

@@ -4,10 +4,27 @@ Shared Go libraries for Appwrite Functions. Public, versioned, and consumed
 with a normal `go get` — no copying into functions.
 
 ```
-go get github.com/ModdingFriendly/appwrite-library@v0.3.0
+go get github.com/ModdingFriendly/appwrite-library@v0.3.2
 ```
 
 Requires Go 1.26 (builds with `go 1.26.0`; pinned Appwrite SDK is `v1.0.0`).
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
+## Scope: transport, not tenancy
+
+This module sends requests and maps answers. It knows nothing about
+organisations, teams, customers or roles, and it adds **no** tenant filtering,
+row ACL or authorization check of its own. Every helper runs with whatever
+key/JWT you configure. Tenant enforcement is the application's job:
+
+- filter every read by the caller's team (`organization_id`),
+- build row permissions from verified team roles (server-side, never from the
+  request body),
+- treat server-owned columns (`organization_id`, `customer_user_id`,
+  `created_by_user_id`, `$permissions`, …) as derived values.
+
+That policy is Reparix's, not the library's, and it is not implied by any
+helper here.
 
 ## Packages
 
@@ -27,6 +44,18 @@ func handler(ctx openruntimes.Context, req *MyRequest) (*MyResponse, error)
 - an unknown error becomes a generic `500 { "error": "internal server error",
   "code": "internal_error" }`; the raw detail is logged privately with
   `ctx.Error` and never returned to the caller.
+- `Fail(ctx, nil)` and a typed-nil `*httpx.Error` are logged and answered with
+  that same structured 500 instead of panicking.
+- serialisation is owned by the package: if a response body (or an error's
+  params) cannot be marshalled, the caller still receives the structured 500,
+  never the SDK's plain-text `"Error encoding JSON."`.
+
+`httpx.Error` carries two operator-only fields, neither serialised:
+
+| Field | Purpose |
+|---|---|
+| `Detail` | sanitised dependency context, logged by `Fail` |
+| `Cause` | wrapped error for `errors.Is`/`errors.As` (transport failures only) |
 
 Router:
 
@@ -57,7 +86,7 @@ type Ticket struct {
 }
 
 page, err := appwrite.ListWith[Ticket](ctx, cfg, "tickets",
-    appwrite.Equal("organization_id", teamID),
+    appwrite.Equal("organization_id", teamID), // tenancy is your filter
     appwrite.OrderDesc("$createdAt"),
     appwrite.Limit(50),
 )
@@ -69,6 +98,22 @@ if err != nil {
 `NewClient(cfg)` and `NewTables(cfg)` are available when a handler needs the
 raw SDK service (for example transactions).
 
+#### Transport policy
+
+The client is hardened, and the policy applies to every request the module
+makes:
+
+- **HTTPS only.** `http://` is accepted for loopback hosts (`localhost`,
+  `*.localhost`, `127.0.0.0/8`, `::1`) so local development and `httptest` work
+  without flags. Any other plain-HTTP host is rejected with
+  `appwrite.ErrInsecureEndpoint` unless `Config.AllowInsecureHTTP` is set
+  explicitly for a trusted internal/test deployment. TLS 1.2 is the minimum.
+- **Redirects are never followed.** The SDK replays headers on every hop, so
+  following a `302` would forward `X-Appwrite-Key` / `X-Appwrite-JWT` to the
+  redirect target. A redirect becomes a 502 `upstream_error` whose cause wraps
+  `appwrite.ErrRedirectRejected`; the target is never contacted.
+- A single API call is bounded by `appwrite.DefaultHTTPTimeout` (30 s).
+
 #### Environment configuration (v0.1.x-compatible calls)
 
 `List`, `Get`, `Create`, `Update` and `Delete` read the same explicit settings
@@ -79,15 +124,47 @@ from the environment:
 | `APPWRITE_ENDPOINT` (or runtime `APPWRITE_FUNCTION_API_ENDPOINT`) | API base URL |
 | `APPWRITE_PROJECT_ID` (or runtime `APPWRITE_FUNCTION_PROJECT_ID`) | project ID |
 | `APPWRITE_DATABASE_ID` | TablesDB database ID |
+| `APPWRITE_RESPONSE_FORMAT` | optional response format override |
 | `x-appwrite-key` request header | execution key |
 
 There is **no fallback** to a hard-coded project, endpoint or database. Missing
 configuration is an error, not a silent default. Set `APPWRITE_DATABASE_ID` as a
 Function Variable when upgrading from v0.1.x.
 
+`X-Appwrite-Response-Format` precedence, highest first:
+
+1. `Config.ResponseFormat` (explicit caller value),
+2. `APPWRITE_RESPONSE_FORMAT`,
+3. `appwrite.DefaultResponseFormat` (`1.8.0`, the version the pinned SDK models
+   were generated for).
+
+An empty or whitespace-only value falls through to the next level, so
+`APPWRITE_RESPONSE_FORMAT=""` restores the pinned default.
+
 Also: `ListWith`, `GetWith`, `CreateWith`, `UpdateWith`, `DeleteWith`,
 `MapError`, and query builders (`Equal`, `OrderAsc`, `OrderDesc`, `Limit`,
 `Offset`, `Search`, `Contains`).
+
+#### Error mapping
+
+`MapError` never returns Appwrite's message. Each status maps to a stable
+message and code, with `table`, `status` and (when the server supplied a
+machine-readable error type) `reason` in `params`:
+
+| Appwrite status | Response | `code` | `message` (constant) |
+|---|---|---|---|
+| 400 | 400 | `bad_request` | `request rejected` (`MessageBadRequest`) |
+| 401 | 401 | `unauthorized` | `authentication required` (`MessageUnauthorized`) |
+| 403 | 403 | `forbidden` | `permission denied` (`MessageForbidden`) |
+| 404 | 404 | `not_found` | `record not found` (`MessageNotFound`) |
+| 409 | 409 | `conflict` | `conflict` (`MessageConflict`) |
+| 412 | 412 | `precondition_failed` | `record changed` (`MessageStale`) |
+| 5xx / other | 502 | `upstream_error` | `appwrite request failed` (`MessageUpstream`) |
+
+The upstream message is sanitised (control characters removed, capped at 512
+characters) into `httpx.Error.Detail`, which `httpx.Fail` logs privately.
+Non-SDK failures (dial errors, timeouts, a rejected redirect) keep their cause,
+so `errors.Is(err, appwrite.ErrRedirectRejected)` still works.
 
 ### `money` — exact money, no floats
 
@@ -105,16 +182,33 @@ stored := total.String()                            // persist this string
 
 fromCents, err := money.FromMinorUnits("GBP", 900)  // integers, no float
 provider, err := money.MoneyFromDecimalString("USD", "12.34")
+absolute, err := money.AbsMoney(money.MustParseMoney("GBP -3.50"))
 ```
 
 - `ParseMoney`, `MustParseMoney`, `ParseMoneyValue` (rejects JSON numbers),
-  `MoneyFromDecimalString`, `FromMinorUnits`, `FormatMoney`.
+  `MoneyFromDecimalString`, `FromMinorUnits`, `FormatMoney`, `ParseDecimal`.
 - `AddMoney`, `SubMoney`, `SumMoney`, `MulMoneyQuantity`, `MulMoneyDecimal`,
   `MulMoneyRate`, `NegMoney`, `AbsMoney`, `CmpMoney`.
-- `Money.String()`, `MinorUnits()`, `IsZero()`, `IsNegative()`.
-- `ErrInvalidMoney`, `ErrCurrencyMismatch`, `ErrMoneyOverflow`.
+- `Money.String()`, `MinorUnits()`, `IsZero()`, `IsNegative()`, `Validate()`.
+- `ErrInvalidMoney`, `ErrInvalidDecimal` (wraps it), `ErrCurrencyMismatch`,
+  `ErrMoneyOverflow`.
 - Supported currencies: `GBP`, `EUR`, `USD`, `CHF`, `AUD`, `CAD` (2 dp) and
   `JPY` (0 dp); anything else is rejected.
+
+**Supported range.** The full `int64` minor-unit range is exact, including
+`math.MinInt64` and `math.MaxInt64`: `ParseMoney(m.String()) == m` for every
+value and every supported currency. The widest stored string is
+`"GBP -92233720368547758.08"` (25 characters, well inside `varchar(32)`). Parsing rejects anything outside
+the range with `ErrMoneyOverflow`; it never wraps. `NegMoney`/`AbsMoney` report
+`ErrMoneyOverflow` for `math.MinInt64` because its positive counterpart is not
+representable.
+
+**Fractional inputs are bounded plain decimals.** `MulMoneyDecimal` and
+`MulMoneyRate` accept `"0"`, `"12"`, `"-1.25"`, `"+0.5"`, `"0.000000001"`:
+optional sign, no leading zeros, at most 15 whole digits and 9 fractional
+digits, no surrounding whitespace. Fractions (`"1/3"`), hex (`"0x10"`),
+exponents (`"1e3"`) and anything longer are rejected with `ErrInvalidDecimal`.
+Results round half-up, ties away from zero.
 
 ### `auth` — JWT identity and team membership
 
@@ -143,7 +237,8 @@ if !membership.Confirmed {
 ```
 
 - The client sends `X-Appwrite-JWT` and never `X-Appwrite-Key`, so it uses only
-  the caller's own permissions.
+  the caller's own permissions. It inherits the hardened transport above
+  (HTTPS, no redirects).
 - `Lookup` is an interface, so applications can stub it in tests.
 - Pass `identity.UserID` from `CurrentUser` into `Membership`; never pass an id
   from the request body or a header.
@@ -157,9 +252,9 @@ if !membership.Confirmed {
 
 #### Error mapping
 
-Appwrite client errors keep the server message (`400`, `401`, `403`, `404`,
-`409`, `412`). Upstream/5xx and non-SDK errors use a generic public message;
-callers log the raw error privately before returning it.
+Token failures (`401`, `403`, `404`) become `httpx.Unauthorized`/`Forbidden` with
+fixed messages. Upstream/5xx and non-SDK errors use a generic public message;
+the raw detail is logged privately before returning.
 
 ### Transactions
 
@@ -203,6 +298,22 @@ Note: a commit that times out or returns an ambiguous acknowledgement may still
 have committed on the server. Callers must keep their own idempotency and
 conflict handling for billing retries and quote decisions.
 
+## Migrating from v0.3.1
+
+- `money.AbsMoney` now returns `(Money, error)`, matching `NegMoney`. It reports
+  `ErrMoneyOverflow` for `math.MinInt64` instead of returning a negative amount.
+- `appwrite.MapError` returns stable public messages, not Appwrite's text
+  (`appwrite.MessageBadRequest`, `MessageNotFound`, …). Codes and statuses are
+  unchanged. If any client matched on the upstream message, move it to the code
+  or the `reason` param.
+- `appwrite: ` plain-HTTP endpoints outside loopback are rejected. Set
+  `Config.AllowInsecureHTTP` only for a trusted internal test deployment.
+- `appwrite: ` redirects are rejected. An endpoint that answered `3xx` now
+  returns `502 upstream_error`; point the configuration at the final URL.
+- `appwrite.ResponseFormat`, `appwrite.Client(ctx)` and `appwrite.Tables(ctx)`
+  are deprecated; use `DefaultResponseFormat`, `NewClient(cfg)` and
+  `NewTables(cfg)`.
+
 ## Migrating from v0.1.x
 
 - `appwrite.DatabaseID` is removed. Pass `appwrite.Config{DatabaseID: ...}` to
@@ -218,11 +329,5 @@ conflict handling for billing retries and quote decisions.
 
 ## Versioning
 
-Tag releases (`v0.2.0`, `v0.3.0`, …). Functions pin a version in `go.mod`.
-
-## Changelog
-
-- `v0.3.0` — new `money` package (canonical string money, integer minor units,
-  `big.Rat` for fractional quantities; no float conversions).
-- `v0.2.0` — explicit `appwrite.Config`, JWT/team membership `auth` lookup,
-  `InTransaction` helper.
+Tag releases (`v0.3.2`, `v0.4.0`, …). Functions pin a version in `go.mod`.
+Release notes live in [CHANGELOG.md](CHANGELOG.md).

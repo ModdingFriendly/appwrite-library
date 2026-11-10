@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -218,20 +219,22 @@ func TestMapErrorFromRealSDKResponses(t *testing.T) {
 		wantStatus int
 		code       string
 		message    string
+		secret     string
 	}{
-		{http.StatusBadRequest, http.StatusBadRequest, "bad_request", "invalid document structure"},
-		{http.StatusUnauthorized, http.StatusUnauthorized, "unauthorized", "user unauthorized"},
-		{http.StatusForbidden, http.StatusForbidden, "forbidden", "missing scope"},
-		{http.StatusNotFound, http.StatusNotFound, "not_found", "row not found"},
-		{http.StatusConflict, http.StatusConflict, "conflict", "row already exists"},
-		{http.StatusPreconditionFailed, http.StatusPreconditionFailed, "precondition_failed", "stale version"},
-		{http.StatusInternalServerError, http.StatusBadGateway, "upstream_error", "internal database secret"},
+		{http.StatusBadRequest, http.StatusBadRequest, "bad_request", appwrite.MessageBadRequest, "invalid document structure: total"},
+		{http.StatusUnauthorized, http.StatusUnauthorized, "unauthorized", appwrite.MessageUnauthorized, "user unauthorized"},
+		{http.StatusForbidden, http.StatusForbidden, "forbidden", appwrite.MessageForbidden, "missing scope rows.read"},
+		{http.StatusNotFound, http.StatusNotFound, "not_found", appwrite.MessageNotFound, "row not found"},
+		{http.StatusConflict, http.StatusConflict, "conflict", appwrite.MessageConflict, "row already exists"},
+		{http.StatusPreconditionFailed, http.StatusPreconditionFailed, "precondition_failed", appwrite.MessageStale, "stale version"},
+		{http.StatusInternalServerError, http.StatusBadGateway, "upstream_error", appwrite.MessageUpstream, "internal database secret"},
 	}
 
 	for _, tc := range tests {
 		t.Run(http.StatusText(tc.status), func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				writeJSON(w, tc.status, `{"message":"`+tc.message+`"}`)
+				writeJSON(w, tc.status, `{"message":"`+tc.secret+`","type":"server_error","code":`+
+					strconv.Itoa(tc.status)+`}`)
 			}))
 			defer srv.Close()
 
@@ -249,18 +252,60 @@ func TestMapErrorFromRealSDKResponses(t *testing.T) {
 			if domain.Code != tc.code {
 				t.Fatalf("code = %q, want %q", domain.Code, tc.code)
 			}
-			if tc.status < 500 && domain.Message != tc.message {
+			// The public message is stable and never the upstream message, even
+			// for 4xx: Appwrite echoes row content back in its own messages.
+			if domain.Message != tc.message {
 				t.Fatalf("message = %q, want %q", domain.Message, tc.message)
 			}
-			if tc.status >= 500 && strings.Contains(domain.Message, tc.message) {
-				t.Fatalf("upstream message leaked: %q", domain.Message)
+			if strings.Contains(domain.Message, tc.secret) {
+				t.Fatalf("upstream message leaked into the public message: %q", domain.Message)
+			}
+			// The raw detail must survive privately for the log line.
+			if !strings.Contains(domain.Detail, tc.secret) {
+				t.Fatalf("private detail %q lost the upstream message %q", domain.Detail, tc.secret)
+			}
+			if got := domain.Params["status"]; got != tc.status {
+				t.Fatalf("params status = %#v, want %d", got, tc.status)
+			}
+			if got := domain.Params["table"]; got != "tickets" {
+				t.Fatalf("params table = %#v", got)
+			}
+			if got := domain.Params["reason"]; got != "server_error" {
+				t.Fatalf("params reason = %#v, want the sanitised Appwrite type", got)
 			}
 		})
 	}
 }
 
+// TestMapErrorDropsUnsafeReason proves the machine-readable reason only passes
+// through when it is a bounded identifier.
+func TestMapErrorDropsUnsafeReason(t *testing.T) {
+	for _, raw := range []string{
+		`{"message":"x","type":"<script>alert(1)</script>"}`,
+		`{"message":"x","type":"UPPER CASE"}`,
+		`{"message":"x"}`,
+		`not json`,
+		`{"message":"x","type":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`,
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusBadRequest, raw)
+		}))
+		_, err := appwrite.GetWith[ticket](testContext(), config(srv.URL), "tickets", "row-1")
+		srv.Close()
+
+		var domain *httpx.Error
+		if !errors.As(err, &domain) {
+			t.Fatalf("error = %T %v", err, err)
+		}
+		if _, present := domain.Params["reason"]; present {
+			t.Fatalf("unsafe reason %q was exposed: %#v", raw, domain.Params)
+		}
+	}
+}
+
 func TestMapErrorHidesNonSDKDetail(t *testing.T) {
-	err := appwrite.MapError(errors.New("dial tcp 10.0.0.1: secret token"), "tickets")
+	cause := errors.New("dial tcp 10.0.0.1: secret token")
+	err := appwrite.MapError(cause, "tickets")
 	var domain *httpx.Error
 	if !errors.As(err, &domain) {
 		t.Fatalf("error = %T", err)
@@ -268,8 +313,14 @@ func TestMapErrorHidesNonSDKDetail(t *testing.T) {
 	if domain.Status != http.StatusBadGateway || domain.Code != "upstream_error" {
 		t.Fatalf("error = %#v", domain)
 	}
+	if domain.Message != appwrite.MessageUpstream {
+		t.Fatalf("message = %q, want the stable upstream message", domain.Message)
+	}
 	if strings.Contains(domain.Message, "secret token") {
 		t.Fatalf("message leaked raw error: %q", domain.Message)
+	}
+	if !errors.Is(err, cause) {
+		t.Fatal("MapError dropped the cause, so callers cannot detect transport conditions")
 	}
 	if appwrite.MapError(nil, "tickets") != nil {
 		t.Fatal("MapError(nil) should be nil")

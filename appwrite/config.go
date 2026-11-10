@@ -3,6 +3,28 @@
 // list/get/create/update/delete, query builders, and SDK errors mapped to the
 // httpx error contract.
 //
+// # Scope: transport, not tenancy
+//
+// This package is deliberately tenant-agnostic. It builds a client, sends a
+// query and maps the answer. It does not know what an organisation, a team or a
+// customer is and it never adds an organization filter, an ACL or an
+// authorization check of its own. Row-level access control (the
+// `organization_id` filter on every read, row permissions built from team
+// roles, customer read-only ACLs, server-owned columns) is the application's
+// responsibility: a handler must pass its own queries and permissions, because
+// only the application knows its tenant model. Treat every helper here as
+// "runs as the configured key/JWT" and enforce policy before calling it.
+//
+// # Transport policy
+//
+// Requests are sent with a hardened client: HTTPS only (loopback or an explicit
+// Config.AllowInsecureHTTP opt-in aside), TLS 1.2+, and redirects are never
+// followed. The SDK authenticates with headers, and Go replays headers on a
+// redirect, so following one could forward X-Appwrite-Key or X-Appwrite-JWT to
+// another origin. A redirect is reported as an upstream failure instead.
+//
+// # Connection settings
+//
 // Connection settings are explicit. The package embeds no endpoint, project or
 // database identifiers; callers pass a Config or supply the documented
 // environment variables.
@@ -30,10 +52,22 @@ const DefaultResponseFormat = "1.8.0"
 
 // EnvResponseFormat lets a deployment override the response format without a
 // code change (for example after upgrading the SDK past the int/string break).
+//
+// Precedence, highest first:
+//
+//  1. Config.ResponseFormat (an explicit caller value always wins),
+//  2. the APPWRITE_RESPONSE_FORMAT environment variable,
+//  3. DefaultResponseFormat.
+//
+// An empty or whitespace-only value at any level falls through to the next, so
+// setting APPWRITE_RESPONSE_FORMAT="" restores the pinned default.
 const EnvResponseFormat = "APPWRITE_RESPONSE_FORMAT"
 
 // ResponseFormat is kept for compatibility with v0.1.x callers. New code
 // should set Config.ResponseFormat or rely on DefaultResponseFormat.
+//
+// Deprecated: use DefaultResponseFormat, or Config.ResponseFormat to override
+// it. This constant will be removed in a future major version.
 const ResponseFormat = DefaultResponseFormat
 
 // Environment variables read by ConfigFromEnv. The APPWRITE_FUNCTION_* names
@@ -59,12 +93,17 @@ var (
 //
 // Endpoint, ProjectID and DatabaseID have no defaults. APIKey is optional for
 // read-only clients but is required for operations that need a server key.
+//
+// AllowInsecureHTTP is an explicit escape hatch for a plain-HTTP endpoint on a
+// non-loopback host (an internal test deployment). Loopback hosts are always
+// accepted, so local development and httptest servers need no flag.
 type Config struct {
-	Endpoint       string
-	ProjectID      string
-	DatabaseID     string
-	APIKey         string
-	ResponseFormat string
+	Endpoint          string
+	ProjectID         string
+	DatabaseID        string
+	APIKey            string
+	ResponseFormat    string
+	AllowInsecureHTTP bool
 }
 
 // Validate checks the full tables configuration.
@@ -84,6 +123,9 @@ func (c Config) validateClient() error {
 	}
 	if strings.TrimSpace(c.ProjectID) == "" {
 		return ErrMissingProjectID
+	}
+	if err := validateEndpoint(strings.TrimRight(strings.TrimSpace(c.Endpoint), "/"), c.AllowInsecureHTTP); err != nil {
+		return err
 	}
 	return nil
 }
@@ -113,7 +155,10 @@ func ConfigFromEnv(ctx openruntimes.Context) Config {
 	}
 }
 
-// NewClient builds a server SDK client from explicit configuration.
+// NewClient builds a server SDK client from explicit configuration. The client
+// uses the hardened transport described in the package documentation: HTTPS
+// only, and redirects are rejected rather than followed with the credentials
+// attached.
 func NewClient(cfg Config) (sdk.Client, error) {
 	cfg = cfg.withDefaults()
 	if err := cfg.validateClient(); err != nil {
@@ -122,6 +167,7 @@ func NewClient(cfg Config) (sdk.Client, error) {
 
 	clt := sdk.New()
 	clt.Endpoint = cfg.Endpoint
+	clt.Client = newHTTPClient(DefaultHTTPTimeout)
 	clt.AddHeader("X-Appwrite-Project", cfg.ProjectID)
 	if cfg.APIKey != "" {
 		clt.AddHeader("X-Appwrite-Key", cfg.APIKey)
@@ -146,7 +192,11 @@ func NewTables(cfg Config) (*tablesdb.TablesDB, error) {
 // Client is the v0.1.x convenience constructor. It reads ConfigFromEnv and, on
 // invalid configuration, logs privately and returns an unconfigured client so
 // the caller's request fails as an upstream error instead of using a default
-// project. Prefer NewClient with an explicit Config.
+// project.
+//
+// Deprecated: use NewClient with an explicit Config. This constructor hides
+// configuration errors behind a client that fails at request time and will be
+// removed in a future major version.
 func Client(ctx openruntimes.Context) sdk.Client {
 	clt, err := NewClient(ConfigFromEnv(ctx))
 	if err != nil {
@@ -155,13 +205,17 @@ func Client(ctx openruntimes.Context) sdk.Client {
 		// default; requests fail closed instead of hitting another project.
 		empty := sdk.New()
 		empty.Endpoint = ""
+		empty.Client = newHTTPClient(DefaultHTTPTimeout)
 		return empty
 	}
 	return clt
 }
 
-// Tables is the v0.1.x convenience constructor. Prefer NewTables with an
-// explicit Config when the database id is not read from the environment.
+// Tables is the v0.1.x convenience constructor.
+//
+// Deprecated: use NewTables with an explicit Config when the database id is not
+// read from the environment. This constructor will be removed in a future major
+// version.
 func Tables(ctx openruntimes.Context) *tablesdb.TablesDB {
 	return tablesdb.New(Client(ctx))
 }
