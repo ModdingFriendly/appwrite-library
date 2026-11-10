@@ -4,7 +4,7 @@ Shared Go libraries for Appwrite Functions. Public, versioned, and consumed
 with a normal `go get` — no copying into functions.
 
 ```
-go get github.com/ModdingFriendly/appwrite-library@v0.2.0
+go get github.com/ModdingFriendly/appwrite-library@v0.3.0
 ```
 
 Requires Go 1.26 (builds with `go 1.26.0`; pinned Appwrite SDK is `v1.0.0`).
@@ -88,6 +88,33 @@ Function Variable when upgrading from v0.1.x.
 Also: `ListWith`, `GetWith`, `CreateWith`, `UpdateWith`, `DeleteWith`,
 `MapError`, and query builders (`Equal`, `OrderAsc`, `OrderDesc`, `Limit`,
 `Offset`, `Search`, `Contains`).
+
+### `money` — exact money, no floats
+
+Canonical storage is the string `"<ISO-4217> <amount>"` (`"GBP 1.00"`,
+`"GBP -3.50"`, `"JPY 500"`) in `varchar(32)` columns. Amounts live in integer
+minor units plus `math/big.Rat` for fractional quantities, so a ledger value
+never passes through `float64`.
+
+```go
+price, err := money.ParseMoney("GBP 2.50")          // strict canonical parse
+line, err := money.MulMoneyQuantity(price, 3)       // "GBP 7.50"
+tax, err := money.MulMoneyRate(line, "20")          // "GBP 1.50"
+total, err := money.SumMoney(line, tax)             // "GBP 9.00"
+stored := total.String()                            // persist this string
+
+fromCents, err := money.FromMinorUnits("GBP", 900)  // integers, no float
+provider, err := money.MoneyFromDecimalString("USD", "12.34")
+```
+
+- `ParseMoney`, `MustParseMoney`, `ParseMoneyValue` (rejects JSON numbers),
+  `MoneyFromDecimalString`, `FromMinorUnits`, `FormatMoney`.
+- `AddMoney`, `SubMoney`, `SumMoney`, `MulMoneyQuantity`, `MulMoneyDecimal`,
+  `MulMoneyRate`, `NegMoney`, `AbsMoney`, `CmpMoney`.
+- `Money.String()`, `MinorUnits()`, `IsZero()`, `IsNegative()`.
+- `ErrInvalidMoney`, `ErrCurrencyMismatch`, `ErrMoneyOverflow`.
+- Supported currencies: `GBP`, `EUR`, `USD`, `CHF`, `AUD`, `CAD` (2 dp) and
+  `JPY` (0 dp); anything else is rejected.
 
 ### `auth` — JWT identity and team membership
 
@@ -192,3 +219,10 @@ conflict handling for billing retries and quote decisions.
 ## Versioning
 
 Tag releases (`v0.2.0`, `v0.3.0`, …). Functions pin a version in `go.mod`.
+
+## Changelog
+
+- `v0.3.0` — new `money` package (canonical string money, integer minor units,
+  `big.Rat` for fractional quantities; no float conversions).
+- `v0.2.0` — explicit `appwrite.Config`, JWT/team membership `auth` lookup,
+  `InTransaction` helper.
