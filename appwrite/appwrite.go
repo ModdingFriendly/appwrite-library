@@ -1,7 +1,12 @@
 package appwrite
 
 import (
+	"encoding/json"
 	"errors"
+	"regexp"
+	"strconv"
+	"strings"
+	"unicode"
 
 	sdk "github.com/appwrite/sdk-for-go/client"
 	"github.com/appwrite/sdk-for-go/id"
@@ -141,36 +146,115 @@ func DeleteWith(ctx openruntimes.Context, cfg Config, table, rowID string) error
 	return nil
 }
 
+// Public messages returned by MapError. They are stable, status-derived strings
+// that a client can rely on; the Appwrite message is never returned because it
+// can echo document content, column names, query fragments or provider text.
+const (
+	MessageBadRequest   = "request rejected"
+	MessageUnauthorized = "authentication required"
+	MessageForbidden    = "permission denied"
+	MessageNotFound     = "record not found"
+	MessageConflict     = "conflict"
+	MessageStale        = "record changed"
+	MessageUpstream     = "appwrite request failed"
+)
+
 // MapError converts an Appwrite SDK error into the httpx error contract.
 //
-// Appwrite client errors keep the server's message because it describes the
-// caller-visible problem. Upstream/server failures and non-SDK errors return a
-// generic public message; callers log the raw error privately.
+// Each status maps to a stable public message and code; the status and the
+// table stay in params, plus a sanitised Appwrite error type as "reason" when
+// the server supplied one (for example "row_not_found"). The upstream message
+// is never returned to the caller: it is sanitised into the error's private
+// Detail field, which httpx.Fail logs and which never reaches the response
+// body. Non-SDK errors (dial failures, timeouts, a rejected redirect) keep their
+// cause attached so callers can still use errors.Is, while exposing nothing.
 func MapError(err error, table string) error {
 	if err == nil {
 		return nil
 	}
+
 	var ae *sdk.AppwriteError
-	if errors.As(err, &ae) {
-		params := map[string]any{"table": table, "status": ae.GetStatusCode()}
-		switch ae.GetStatusCode() {
-		case 400:
-			return httpx.BadRequest(ae.GetMessage(), params)
-		case 401:
-			return httpx.Unauthorized(ae.GetMessage(), params)
-		case 403:
-			return httpx.Forbidden(ae.GetMessage(), params)
-		case 404:
-			return httpx.NotFound(ae.GetMessage(), params)
-		case 409:
-			return httpx.Conflict(ae.GetMessage(), params)
-		case 412:
-			return httpx.PreconditionFailed(ae.GetMessage(), params)
-		default:
-			return httpx.Upstream("appwrite request failed", params)
+	if !errors.As(err, &ae) || ae == nil {
+		return &httpx.Error{
+			Status:  502,
+			Code:    "upstream_error",
+			Message: MessageUpstream,
+			Params:  map[string]any{"table": table},
+			Cause:   err,
 		}
 	}
-	return httpx.Upstream("appwrite request failed", map[string]any{"table": table})
+
+	status := ae.GetStatusCode()
+	params := map[string]any{"table": table, "status": status}
+	reason := sanitizeReason(ae.GetResponse())
+	if reason != "" {
+		params["reason"] = reason
+	}
+	detail := "appwrite " + table + " status " + strconv.Itoa(status)
+	if reason != "" {
+		detail += " (" + reason + ")"
+	}
+	if message := sanitizeDetail(ae.GetMessage()); message != "" {
+		detail += ": " + message
+	}
+
+	switch status {
+	case 400:
+		return &httpx.Error{Status: 400, Code: "bad_request", Message: MessageBadRequest, Params: params, Detail: detail}
+	case 401:
+		return &httpx.Error{Status: 401, Code: "unauthorized", Message: MessageUnauthorized, Params: params, Detail: detail}
+	case 403:
+		return &httpx.Error{Status: 403, Code: "forbidden", Message: MessageForbidden, Params: params, Detail: detail}
+	case 404:
+		return &httpx.Error{Status: 404, Code: "not_found", Message: MessageNotFound, Params: params, Detail: detail}
+	case 409:
+		return &httpx.Error{Status: 409, Code: "conflict", Message: MessageConflict, Params: params, Detail: detail}
+	case 412:
+		return &httpx.Error{Status: 412, Code: "precondition_failed", Message: MessageStale, Params: params, Detail: detail}
+	default:
+		return &httpx.Error{Status: 502, Code: "upstream_error", Message: MessageUpstream, Params: params, Detail: detail}
+	}
+}
+
+// errorTypePattern bounds the Appwrite error "type" values that may be exposed
+// as a machine-readable reason.
+var errorTypePattern = regexp.MustCompile(`^[a-z0-9_.-]{1,64}$`)
+
+// sanitizeReason extracts the stable Appwrite error type from the raw response
+// body. Anything that does not look like a machine code is dropped.
+func sanitizeReason(rawResponse string) string {
+	if rawResponse == "" {
+		return ""
+	}
+	var body struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal([]byte(rawResponse), &body); err != nil {
+		return ""
+	}
+	if !errorTypePattern.MatchString(body.Type) {
+		return ""
+	}
+	return body.Type
+}
+
+// sanitizeDetail flattens a private diagnostic string: control characters are
+// removed so a newline cannot forge a log line, and the length is capped so one
+// bad response cannot flood the function log.
+func sanitizeDetail(raw string) string {
+	const limit = 512
+	var builder strings.Builder
+	for _, char := range raw {
+		if char == '\n' || char == '\r' || char == '\t' {
+			builder.WriteByte(' ')
+		} else if !unicode.IsControl(char) {
+			builder.WriteRune(char)
+		}
+		if builder.Len() >= limit {
+			break
+		}
+	}
+	return strings.TrimSpace(builder.String())
 }
 
 // Query builders re-exported so handlers import one package.
