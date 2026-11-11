@@ -4,7 +4,7 @@ Shared Go libraries for Appwrite Functions. Public, versioned, and consumed
 with a normal `go get` — no copying into functions.
 
 ```
-go get github.com/ModdingFriendly/appwrite-library@v0.3.2
+go get github.com/ModdingFriendly/appwrite-library@v0.4.0
 ```
 
 Requires Go 1.26 (builds with `go 1.26.0`; pinned Appwrite SDK is `v1.0.0`).
@@ -27,6 +27,16 @@ That policy is Reparix's, not the library's, and it is not implied by any
 helper here.
 
 ## Packages
+
+### `apikeys` — scoped API keys
+
+Key management (`Create`, `List`, `Rotate`, `Revoke`, `Usage`) and the machine
+request verifier (`NewAPIKeyVerifier().Verify`). The caller injects the
+authorizer and organisation lookup, so the package never decides product roles
+or tenancy by itself. Secrets are stored only as `HMAC-SHA256(pepper, secret)`;
+the verifier rejects revoked/expired/inactive/wrong-secret keys with the same
+401, uses the stored key row's organisation as the tenant authority, and fails
+closed with 503 when `REPARIX_API_KEY_PEPPER` is unset.
 
 ### `httpx` — typed handler contract
 

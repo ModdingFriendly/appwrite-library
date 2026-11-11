@@ -3,6 +3,27 @@
 All notable changes to `github.com/ModdingFriendly/appwrite-library`.
 Versions follow semantic versioning; functions pin a version in `go.mod`.
 
+## v0.4.0 — scoped API keys package
+
+Moves the scoped API-key management and machine-key verifier out of a single
+Function so more than one Function can share it (the split plan's `core_admin`
+and any machine-route consumer).
+
+### Added
+
+- **`apikeys` package** — create/list/rotate/revoke/usage management plus the
+  bearer verifier. It is product-agnostic: callers inject an `Authorizer` and an
+  `OrganizationLookup`, so tenant/role policy stays in the Function. Behaviour
+  is unchanged from the previously internal copy: explicit scope allowlist,
+  HMAC-SHA256 pepper (`REPARIX_API_KEY_PEPPER`), constant-time comparison,
+  stored-row tenant authority, fail-closed 503 when the pepper is missing,
+  per-key rate limits and metadata-only `api_logs` usage rows.
+
+### Compatibility
+
+- No existing package changed. Consumers that did not use the internal copy are
+  unaffected.
+
 ## v0.3.2 — review fixes
 
 Security and correctness fixes from the 2026-11-10 review. No behaviour change
