@@ -1,0 +1,92 @@
+[
+  {
+    "name": "lower-case email is redacted",
+    "kind": "text",
+    "input": "Ticket updated — iPhone 15 bob@example.com Pro",
+    "want": "Ticket updated — iPhone 15 [redacted] Pro"
+  },
+  {
+    "name": "upper-case email is redacted case-insensitively",
+    "kind": "text",
+    "input": "Contact BOB@Example.COM now",
+    "want": "Contact [redacted] now"
+  },
+  {
+    "name": "multiple emails are all redacted",
+    "kind": "text",
+    "input": "a@b.com, c@d.org",
+    "want": "[redacted], [redacted]"
+  },
+  {
+    "name": "tagged and multi-label email is redacted",
+    "kind": "text",
+    "input": "support+tag@example.co.uk",
+    "want": "[redacted]"
+  },
+  {
+    "name": "email inside angle brackets keeps the brackets",
+    "kind": "text",
+    "input": "Bob Smith <bob@example.com>",
+    "want": "Bob Smith <[redacted]>"
+  },
+  {
+    "name": "text that only looks like an email is unchanged",
+    "kind": "text",
+    "input": "user@localhost",
+    "want": "user@localhost"
+  },
+  {
+    "name": "control characters become single spaces",
+    "kind": "text",
+    "input": "iPhone\u0000 15\nPro",
+    "want": "iPhone 15 Pro"
+  },
+  {
+    "name": "tabs and CRLF are stripped",
+    "kind": "text",
+    "input": "Ticket\tcreated\r\nnow",
+    "want": "Ticket created now"
+  },
+  {
+    "name": "surrounding and repeated whitespace is collapsed",
+    "kind": "text",
+    "input": "  Ticket   created  ",
+    "want": "Ticket created"
+  },
+  {
+    "name": "clean text is unchanged",
+    "kind": "text",
+    "input": "Ticket created — iPhone 15",
+    "want": "Ticket created — iPhone 15"
+  },
+  {
+    "name": "spaces and punctuation are dropped from a token",
+    "kind": "token",
+    "input": "row id 1!",
+    "want": "rowid1"
+  },
+  {
+    "name": "allowed token separators are kept",
+    "kind": "token",
+    "input": "ticket-1.row_2",
+    "want": "ticket-1.row_2"
+  },
+  {
+    "name": "colons are safe in a token",
+    "kind": "token",
+    "input": "team:abc",
+    "want": "team:abc"
+  },
+  {
+    "name": "non-ASCII and path characters are dropped from a token",
+    "kind": "token",
+    "input": "tïcket/42",
+    "want": "tcket42"
+  },
+  {
+    "name": "empty token stays empty",
+    "kind": "token",
+    "input": "   ",
+    "want": ""
+  }
+]
