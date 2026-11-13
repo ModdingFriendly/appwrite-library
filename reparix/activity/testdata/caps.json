@@ -1,0 +1,93 @@
+[
+  {
+    "name": "summary column caps at 255 runes",
+    "kind": "text",
+    "repeat": "A",
+    "count": 400,
+    "limit": 255,
+    "want_runes": 255,
+    "want_prefix": "AAAA"
+  },
+  {
+    "name": "summary below the cap is unchanged",
+    "kind": "text",
+    "repeat": "B",
+    "count": 100,
+    "limit": 255,
+    "want_runes": 100,
+    "want_prefix": "BBBB"
+  },
+  {
+    "name": "display label caps at 120 runes",
+    "kind": "text",
+    "repeat": "C",
+    "count": 300,
+    "limit": 120,
+    "want_runes": 120,
+    "want_prefix": "CCCC"
+  },
+  {
+    "name": "actor name caps at 255 runes",
+    "kind": "text",
+    "repeat": "D",
+    "count": 300,
+    "limit": 255,
+    "want_runes": 255,
+    "want_prefix": "DDDD"
+  },
+  {
+    "name": "token column caps at 64 runes",
+    "kind": "token",
+    "repeat": "a",
+    "count": 100,
+    "limit": 64,
+    "want_runes": 64,
+    "want_prefix": "aaaa"
+  },
+  {
+    "name": "event column caps at 64 runes",
+    "kind": "token",
+    "repeat": "e",
+    "count": 100,
+    "limit": 64,
+    "want_runes": 64,
+    "want_prefix": "eeee"
+  },
+  {
+    "name": "value exactly at the cap is unchanged",
+    "kind": "text",
+    "repeat": "Z",
+    "count": 255,
+    "limit": 255,
+    "want_runes": 255,
+    "want_prefix": "ZZZZ"
+  },
+  {
+    "name": "value one past the cap is truncated",
+    "kind": "text",
+    "repeat": "Z",
+    "count": 256,
+    "limit": 255,
+    "want_runes": 255,
+    "want_prefix": "ZZZZ"
+  },
+  {
+    "name": "multi-byte text is capped without splitting a rune",
+    "kind": "text",
+    "repeat": "£",
+    "count": 300,
+    "limit": 255,
+    "want_runes": 255,
+    "want_prefix": "££££"
+  },
+  {
+    "name": "prefix is preserved when a long display value is capped",
+    "kind": "text",
+    "prefix": "Ticket created — ",
+    "repeat": "E",
+    "count": 300,
+    "limit": 255,
+    "want_runes": 255,
+    "want_prefix": "Ticket created — E"
+  }
+]

@@ -1,0 +1,151 @@
+[
+  {
+    "name": "empty text is never spam and scores zero",
+    "text": "",
+    "want_is_spam": false,
+    "want_score": 0
+  },
+  {
+    "name": "whitespace-only text is never spam and scores zero",
+    "text": "   \n\t ",
+    "want_is_spam": false,
+    "want_score": 0
+  },
+  {
+    "name": "normal repair sentence is not spam",
+    "text": "My phone screen is cracked and needs replacing.",
+    "want_is_spam": false,
+    "want_score": 0
+  },
+  {
+    "name": "normal service review is not spam",
+    "text": "Great repair service, quick turnaround and friendly staff.",
+    "want_is_spam": false,
+    "want_score": 0
+  },
+  {
+    "name": "normal text with surrounding whitespace is not spam",
+    "text": "  My phone screen is cracked and needs replacing.  ",
+    "want_is_spam": false,
+    "want_score": 0
+  },
+  {
+    "name": "repeated characters alone stay below the spam threshold",
+    "text": "HELLO!!!",
+    "want_is_spam": false,
+    "want_score": 0.4
+  },
+  {
+    "name": "repeated run plus vowel-heavy short text is spam",
+    "text": "aaab",
+    "want_is_spam": true,
+    "want_score": 0.7
+  },
+  {
+    "name": "long vowel-heavy single word is spam",
+    "repeat": "a",
+    "count": 52,
+    "want_is_spam": true,
+    "want_score": 1
+  },
+  {
+    "name": "short vowel-heavy single word is still spam",
+    "repeat": "a",
+    "count": 29,
+    "want_is_spam": true,
+    "want_score": 0.7
+  },
+  {
+    "name": "long no-vowel single word is spam at the threshold",
+    "text": "ckckckckckckckckckckckckckckckckckckckckckckck",
+    "want_is_spam": true,
+    "want_score": 0.6
+  },
+  {
+    "name": "long no-vowel run of identical bytes is spam",
+    "repeat": "z",
+    "count": 41,
+    "want_is_spam": true,
+    "want_score": 1
+  },
+  {
+    "name": "short no-vowel token is below the threshold",
+    "text": "xyz",
+    "want_is_spam": false,
+    "want_score": 0.3
+  },
+  {
+    "name": "short repeated no-vowel token is below the threshold",
+    "text": "xyzxyzxyz",
+    "want_is_spam": false,
+    "want_score": 0.3
+  },
+  {
+    "name": "exactly three words is not a few-words signal",
+    "text": "a b c",
+    "want_is_spam": false,
+    "want_score": 0
+  },
+  {
+    "name": "vowel ratio exactly at the upper bound is not flagged",
+    "text": "aei x",
+    "want_is_spam": false,
+    "want_score": 0
+  },
+  {
+    "name": "vowel ratio below the lower bound is flagged but stays below spam",
+    "text": "a bcdf",
+    "want_is_spam": false,
+    "want_score": 0.3
+  },
+  {
+    "name": "long single word with normal vowel ratio is below the threshold",
+    "text": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqr",
+    "want_is_spam": false,
+    "want_score": 0.3
+  },
+  {
+    "name": "long single word with alternating bytes is below the threshold",
+    "text": "abcabcabcabcabcabcabcabcabcabcabcabcabcabc",
+    "want_is_spam": false,
+    "want_score": 0.3
+  },
+  {
+    "name": "long multi-byte no-vowel text scores by bytes",
+    "repeat": "£",
+    "count": 40,
+    "want_is_spam": true,
+    "want_score": 0.6
+  },
+  {
+    "name": "short accented text has no ascii vowels but is below the threshold",
+    "text": "ééé",
+    "want_is_spam": false,
+    "want_score": 0.3
+  },
+  {
+    "name": "long accented single word is spam by byte length",
+    "repeat": "é",
+    "count": 41,
+    "want_is_spam": true,
+    "want_score": 0.6
+  },
+  {
+    "name": "loud marketing phrase with a long single word is not automatically spam",
+    "text": "BUY CHEAP WATCHES AT WWW.EXAMPLE.COM NOW",
+    "want_is_spam": false,
+    "want_score": 0.4
+  },
+  {
+    "name": "repeated normal words are not spam",
+    "text": "REPAIR REPAIR REPAIR REPAIR",
+    "want_is_spam": false,
+    "want_score": 0
+  },
+  {
+    "name": "long normal sentence is not spam",
+    "text": "Need a quote for a laptop screen replacement please thanks",
+    "want_is_spam": false,
+    "want_score": 0
+  }
+]
