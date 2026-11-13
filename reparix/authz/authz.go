@@ -112,9 +112,15 @@ func Verify(ctx context.Context, headers map[string]string, lookup Lookup) (Call
 // non-member, i.e. a forged organisation, is 403) → membership/identity/team
 // mismatch (403) → unconfirmed (403).
 func VerifyClaim(ctx context.Context, headers map[string]string, claimedTeamID string, lookup Lookup) (Caller, error) {
-	jwt, _ := tenant.Header(headers, JWTHeader)
+	jwt, jwtAmbiguous := tenant.Header(headers, JWTHeader)
+	if jwtAmbiguous {
+		return Caller{}, httpx.Unauthorized("ambiguous authentication header", map[string]any{"header": JWTHeader})
+	}
 	if jwt == "" {
 		return Caller{}, httpx.Unauthorized("authentication required", map[string]any{"header": JWTHeader})
+	}
+	if _, orgAmbiguous := tenant.Header(headers, OrganizationHeader); orgAmbiguous {
+		return Caller{}, httpx.Unauthorized("ambiguous organization header", map[string]any{"header": OrganizationHeader})
 	}
 	if lookup == nil {
 		return Caller{}, httpx.Upstream("authentication is not configured", nil)

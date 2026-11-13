@@ -186,3 +186,57 @@ func TestJWTLookupConfigNeverCarriesKey(t *testing.T) {
 		t.Fatal("empty jwt must be 401")
 	}
 }
+
+func TestAmbiguousOrganizationHeaderIs401(t *testing.T) {
+	h := map[string]string{
+		"X-Appwrite-User-JWT":       "jwt-1",
+		"x-reparix-organization-id": "t1",
+		"X-REPARIX-ORGANIZATION-ID": "t2",
+	}
+	for name, call := range map[string]func(*stubLookup) (Caller, error){
+		"Verify":      func(l *stubLookup) (Caller, error) { return Verify(context.Background(), h, l) },
+		"VerifyClaim": func(l *stubLookup) (Caller, error) { return VerifyClaim(context.Background(), h, "t1", l) },
+	} {
+		l := lookupFor("admin")
+		c, err := call(l)
+		if status(t, err) != 401 {
+			t.Fatalf("%s: want 401, got %v", name, err)
+		}
+		if c.UserID() != "" || c.TeamID() != "" || l.gotJWT != "" || l.gotTeam != "" {
+			t.Fatalf("%s: identity built or lookup called on ambiguous org", name)
+		}
+	}
+}
+
+func TestAmbiguousJWTHeaderIs401(t *testing.T) {
+	h := map[string]string{
+		"x-appwrite-user-jwt":       "jwt-a",
+		"X-APPWRITE-USER-JWT":       "jwt-b",
+		"X-Reparix-Organization-Id": "t1",
+	}
+	l := lookupFor("admin")
+	c, err := Verify(context.Background(), h, l)
+	if status(t, err) != 401 {
+		t.Fatalf("want 401, got %v", err)
+	}
+	if c.UserID() != "" || l.gotJWT != "" {
+		t.Fatal("identity built or lookup called on ambiguous JWT")
+	}
+}
+
+func TestCanonicalAndSingleValueHeadersStillVerify(t *testing.T) {
+	cases := map[string]map[string]string{
+		"single": headers("t1"),
+		"canonical exact match": {
+			"x-appwrite-user-jwt": "jwt-1", "X-APPWRITE-USER-JWT": " jwt-1 ",
+			"X-Reparix-Organization-Id": "t1", "x-reparix-organization-id": "t1 ",
+		},
+	}
+	for name, h := range cases {
+		l := lookupFor("admin")
+		c, err := Verify(context.Background(), h, l)
+		if err != nil || c.UserID() != "u1" || c.TeamID() != "t1" || l.gotJWT != "jwt-1" {
+			t.Fatalf("%s: %+v %v", name, c, err)
+		}
+	}
+}
