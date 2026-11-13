@@ -112,7 +112,7 @@ func Verify(ctx context.Context, headers map[string]string, lookup Lookup) (Call
 // non-member, i.e. a forged organisation, is 403) → membership/identity/team
 // mismatch (403) → unconfirmed (403).
 func VerifyClaim(ctx context.Context, headers map[string]string, claimedTeamID string, lookup Lookup) (Caller, error) {
-	jwt := tenant.Header(headers, JWTHeader)
+	jwt, _ := tenant.Header(headers, JWTHeader)
 	if jwt == "" {
 		return Caller{}, httpx.Unauthorized("authentication required", map[string]any{"header": JWTHeader})
 	}

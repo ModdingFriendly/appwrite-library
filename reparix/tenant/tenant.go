@@ -28,22 +28,61 @@ var idPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$`)
 func ValidID(s string) bool { return idPattern.MatchString(s) }
 
 // Header reads a header case-insensitively and trims it. Missing is "".
-func Header(headers map[string]string, name string) string {
-	if value, ok := headers[name]; ok {
-		return strings.TrimSpace(value)
-	}
-	for key, value := range headers {
-		if strings.EqualFold(key, name) {
-			return strings.TrimSpace(value)
+//
+// The second result reports ambiguity: the header is present under more than
+// one casing and the trimmed values differ. Callers that use the value for a
+// security decision must fail closed when ambiguous is true instead of trusting
+// either value. Missing, blank, single-value and agreeing duplicate headers are
+// never ambiguous.
+//
+// When the requested spelling (the canonical key) is present it wins, so a
+// caller that ignores the signal keeps the historical canonical behaviour. If
+// differing duplicates exist without a canonical key, the value is "" so the
+// result does not depend on map iteration order.
+func Header(headers map[string]string, name string) (value string, ambiguous bool) {
+	var (
+		trimmed      string
+		firstValue   string
+		seen         bool
+		hasCanonical bool
+		canonical    string
+	)
+	for key, raw := range headers {
+		if !strings.EqualFold(key, name) {
+			continue
+		}
+		trimmed = strings.TrimSpace(raw)
+		if !seen {
+			seen = true
+			firstValue = trimmed
+		} else if trimmed != firstValue {
+			ambiguous = true
+		}
+		if key == name {
+			hasCanonical = true
+			canonical = trimmed
 		}
 	}
-	return ""
+	if !seen {
+		return "", false
+	}
+	if hasCanonical {
+		return canonical, ambiguous
+	}
+	if ambiguous {
+		return "", true
+	}
+	return firstValue, false
 }
 
 // ClaimedOrganization returns the untrusted organisation claim from the
 // canonical header. It must be verified against a membership before use.
+//
+// It drops the ambiguity signal; callers that must reject duplicate differing
+// values should call Header(headers, OrganizationHeader) directly.
 func ClaimedOrganization(headers map[string]string) string {
-	return Header(headers, OrganizationHeader)
+	value, _ := Header(headers, OrganizationHeader)
+	return value
 }
 
 // CheckBodyOrganization rejects a body organization_id that differs from the

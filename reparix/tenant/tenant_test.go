@@ -38,6 +38,85 @@ func TestHeaderCaseInsensitiveAndTrimmed(t *testing.T) {
 	if ClaimedOrganization(nil) != "" {
 		t.Fatal("missing is empty")
 	}
+	value, ambiguous := Header(h, OrganizationHeader)
+	if value != "t1" || ambiguous {
+		t.Fatalf("single header must resolve without ambiguity: %q %v", value, ambiguous)
+	}
+}
+
+func TestHeaderAmbiguity(t *testing.T) {
+	cases := []struct {
+		name      string
+		headers   map[string]string
+		want      string
+		ambiguous bool
+	}{
+		{name: "absent", headers: nil},
+		{name: "canonical only", headers: map[string]string{OrganizationHeader: " t1 "}, want: "t1"},
+		{name: "other casing only", headers: map[string]string{"X-Reparix-Organization-Id": " t1 "}, want: "t1"},
+		{name: "blank only", headers: map[string]string{"X-Reparix-Organization-Id": "   "}},
+		{name: "duplicate agreeing values", headers: map[string]string{"X-Reparix-Organization-Id": "t1", OrganizationHeader: " t1 "}, want: "t1"},
+		{
+			name:      "duplicate differing values without canonical",
+			headers:   map[string]string{"X-Reparix-Organization-Id": "t1", "X-REPARIX-ORGANIZATION-ID": "t2"},
+			ambiguous: true,
+		},
+		{
+			name:      "canonical wins over differing duplicate",
+			headers:   map[string]string{OrganizationHeader: " t1 ", "X-Reparix-Organization-Id": "t2"},
+			want:      "t1",
+			ambiguous: true,
+		},
+		{
+			name:      "blank canonical differs from value",
+			headers:   map[string]string{OrganizationHeader: "  ", "X-Reparix-Organization-Id": "t2"},
+			ambiguous: true,
+		},
+		{
+			name:      "blank and value without canonical",
+			headers:   map[string]string{"X-Reparix-Organization-Id": "  ", "X-REPARIX-ORGANIZATION-ID": "t2"},
+			ambiguous: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			value, ambiguous := Header(tc.headers, OrganizationHeader)
+			if value != tc.want || ambiguous != tc.ambiguous {
+				t.Fatalf("Header() = %q, %v; want %q, %v", value, ambiguous, tc.want, tc.ambiguous)
+			}
+		})
+	}
+}
+
+func TestHeaderAmbiguityIsDeterministic(t *testing.T) {
+	// The reproduction from the original report: three case variants with
+	// different values used to pick a different winner per call.
+	h := map[string]string{
+		"X-Reparix-Organization-Id": "t1",
+		"X-REPARIX-ORGANIZATION-ID": "t2",
+		"X-Reparix-Organization-ID": "t3",
+	}
+	for i := 0; i < 1000; i++ {
+		value, ambiguous := Header(h, OrganizationHeader)
+		if value != "" || !ambiguous {
+			t.Fatalf("call %d: Header() = %q, %v; want \"\", true", i, value, ambiguous)
+		}
+	}
+}
+
+func TestClaimedOrganizationResolution(t *testing.T) {
+	single := map[string]string{"X-Reparix-Organization-Id": "  t1 "}
+	if got := ClaimedOrganization(single); got != "t1" {
+		t.Fatalf("single value = %q; want t1", got)
+	}
+	canonical := map[string]string{OrganizationHeader: " t1 ", "X-Reparix-Organization-Id": "t2"}
+	if got := ClaimedOrganization(canonical); got != "t1" {
+		t.Fatalf("canonical value = %q; want t1", got)
+	}
+	differing := map[string]string{"X-Reparix-Organization-Id": "t1", "X-REPARIX-ORGANIZATION-ID": "t2"}
+	if got := ClaimedOrganization(differing); got != "" {
+		t.Fatalf("differing duplicates without canonical must not resolve: %q", got)
+	}
 }
 
 func TestCheckBodyOrganization(t *testing.T) {
