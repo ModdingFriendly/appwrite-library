@@ -3,6 +3,26 @@
 All notable changes to `github.com/ModdingFriendly/appwrite-library`.
 Versions follow semantic versioning; functions pin a version in `go.mod`.
 
+## v0.5.0 — firehose publisher package
+
+### Added
+
+- **`reparix/firehose` package** — the shared publisher side of the Reparix
+  event firehose. Builds the event envelope, diffs a write into before/after
+  `Change`s (text fields keep both values for a word diff; secrets such as
+  passcodes, tokens, keys and signatures are recorded as changed without their
+  values; values are capped at 20 000 characters), names events
+  (`<entity>.created|updated|deleted`, or `.added|updated|removed` for child
+  rows), derives entity refs (`customer:ID`, `purchase_order:ID`, ...) so a
+  parent's log can include its children, and provides `Create`, `Update` and
+  `Delete` helpers that write the business row and its `firehose_events` row in
+  one TablesDB transaction. Verified caller identity is passed in; nothing is
+  read from a request body.
+
+### Compatibility
+
+- Additive. No existing package changed.
+
 ## v0.4.0 — scoped API keys package
 
 Moves the scoped API-key management and machine-key verifier out of a single
