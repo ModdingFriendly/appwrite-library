@@ -50,6 +50,9 @@ func TestSummarySpellsOutStatusMovesOnly(t *testing.T) {
 	if !strings.HasPrefix(got, "Purchase order updated — PO-7") || !strings.Contains(got, "status Draft → Ordered") || strings.Contains(got, "x@y.z") {
 		t.Fatalf("summary: %q", got)
 	}
+	if strings.Contains(got, "sup1") {
+		t.Fatalf("id fields must not be spelled out: %q", got)
+	}
 	if strings.Contains(got, "notes") {
 		t.Fatalf("free text must not be spelled out: %q", got)
 	}

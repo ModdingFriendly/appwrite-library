@@ -250,7 +250,12 @@ func Summary(entity string, op Op, row map[string]any, changes []Change) string 
 	}
 	if op == OpUpdate {
 		shown := 0
-		for _, c := range changes {
+		ordered := append([]Change{}, changes...)
+		sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Field == "status" && ordered[j].Field != "status" })
+		for _, c := range ordered {
+			if strings.HasSuffix(c.Field, "_id") {
+				continue // ids are noise in a one-line summary
+			}
 			if c.Kind != KindValue || c.After == "" || utf8.RuneCountInString(c.Before) > 32 || utf8.RuneCountInString(c.After) > 32 {
 				continue
 			}
