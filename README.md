@@ -333,6 +333,19 @@ data. `AppwriteStore` is the store for a Function execution, and `Purge` deletes
 an organisation's rows older than a cutoff, bounded, ignoring rows that are
 already gone. Jobs must be idempotent.
 
+### `reparix/plans` — plan limits
+
+Enforces an organisation's plan limits on the server (PAR-1304). `AppwriteStore`
+reads the plan from the organisation's `billing_accounts` row (by plan id, then
+by Stripe price); `Enforce(store, orgID, metric, adding, counter, log)` counts
+usage only when the metric is limited and returns a `402 plan_limit_reached`
+`httpx.Error` when the create would go past the limit. Metrics: `Users`,
+`TicketsPerMonth`, `SMSPerMonth` (calendar month, UTC) and `StorageMB`, with
+the counters `TicketsThisMonth`, `SMSThisMonth` and `StoredMB`. A limit of zero
+is unlimited, an organisation without a plan is not limited, an organisation
+already over a limit keeps its data and only new creates are refused, and a
+failure to read the plan or the usage is logged and allowed.
+
 ## Migrating from v0.3.1
 
 - `money.AbsMoney` now returns `(Money, error)`, matching `NegMoney`. It reports
