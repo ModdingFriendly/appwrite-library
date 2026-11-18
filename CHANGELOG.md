@@ -3,6 +3,21 @@
 All notable changes to `github.com/ModdingFriendly/appwrite-library`.
 Versions follow semantic versioning; functions pin a version in `go.mod`.
 
+## v0.8.0 — plan limits
+
+### Added
+
+- **`reparix/plans` package** — server-side plan limits (PAR-1304): `Limits`,
+  `Check`, `Enforce`, `MonthStart`, `AppwriteStore`, and the counters
+  `TicketsThisMonth`, `SMSThisMonth` and `StoredMB`. A refusal is
+  `402 plan_limit_reached` with the metric, usage, limit and plan in its params.
+- **`appwrite.GreaterThanEqual`** query builder.
+
+### Compatibility
+
+- Additive. A service that enforces limits needs read access to
+  `billing_accounts`, `plans` and the table its counter reads.
+
 ## v0.7.0 — scheduled jobs
 
 ### Added
