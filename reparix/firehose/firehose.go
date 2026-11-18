@@ -77,6 +77,7 @@ type Event struct {
 	Version        int
 	OrganizationID string
 	ActorUserID    string
+	ActorName      string
 	ActorRole      string
 	SubjectTable   string
 	SubjectID      string
@@ -341,6 +342,8 @@ type Caller struct {
 	TeamID string
 	UserID string
 	Role   string
+	// Name is the caller's display name, recorded as the event's actor_name.
+	Name string
 }
 
 // Spec describes one gateway write for BuildGatewayEvent.
@@ -377,7 +380,7 @@ func BuildGatewayEvent(s Spec) Event {
 	}
 	return Event{
 		Name: s.Naming.For(s.Op), Version: s.Version, OrganizationID: s.Caller.TeamID,
-		ActorUserID: s.Caller.UserID, ActorRole: s.Caller.Role,
+		ActorUserID: s.Caller.UserID, ActorName: s.Caller.Name, ActorRole: s.Caller.Role,
 		SubjectTable: s.Table, SubjectID: s.RowID, TicketID: ticket,
 		Refs: Refs(s.Entity, s.RowID, s.Before, s.After), CorrelationID: s.CorrelationID,
 		Source: SourceGateway, OccurredAt: s.Now,
@@ -400,7 +403,7 @@ func (e Event) RowData() (map[string]any, error) {
 		"payload":         string(payload),
 	}
 	for key, value := range map[string]string{
-		"actor_user_id": e.ActorUserID, "actor_role": e.ActorRole, "subject_table": e.SubjectTable,
+		"actor_user_id": e.ActorUserID, "actor_name": e.ActorName, "actor_role": e.ActorRole, "subject_table": e.SubjectTable,
 		"subject_id": e.SubjectID, "ticket_id": e.TicketID, "correlation_id": e.CorrelationID,
 	} {
 		if strings.TrimSpace(value) != "" {

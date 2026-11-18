@@ -3,6 +3,21 @@
 All notable changes to `github.com/ModdingFriendly/appwrite-library`.
 Versions follow semantic versioning; functions pin a version in `go.mod`.
 
+## v0.9.1 — caller display names on audit events
+
+### Added
+
+- **`auth.Identity.Name`** — the verified account's display name from
+  `Account.Get()`. It is server-derived, never read from a header or body, so a
+  caller cannot forge who they are.
+- **`firehose.Caller.Name`** and `firehose.Event.ActorName` — the gateway event
+  now records `actor_name` alongside `actor_user_id`, and leaves it absent when
+  the caller has no name. The audit timeline shows who acted, not just an id.
+
+### Compatibility
+
+- Additive. Existing callers compile unchanged; events gain one optional field.
+
 ## Unreleased — bot challenge
 
 ### Added

@@ -66,6 +66,9 @@ func ConfigFromEnv() Config {
 // Identity is the verified account, before any team is resolved.
 type Identity struct {
 	UserID string
+	// Name is the account's display name as returned by the verified Account.Get()
+	// call. It is never read from a request header or body.
+	Name string
 }
 
 // Membership is the verified team membership returned by the Teams API.
@@ -122,7 +125,7 @@ func (l *JWTLookup) CurrentUser(ctx openruntimes.Context) (*Identity, error) {
 	if !user.Status {
 		return nil, httpx.Unauthorized("account is disabled", nil)
 	}
-	return &Identity{UserID: user.Id}, nil
+	return &Identity{UserID: user.Id, Name: strings.TrimSpace(user.Name)}, nil
 }
 
 // Membership lists the membership for userID in teamID using the same JWT.
