@@ -3,6 +3,22 @@
 All notable changes to `github.com/ModdingFriendly/appwrite-library`.
 Versions follow semantic versioning; functions pin a version in `go.mod`.
 
+## Unreleased — bot challenge
+
+### Added
+
+- **`reparix/botcheck` package** — server-side verification of the bot challenge
+  a browser solved before a guest write (PAR-1211a): `Config`, `FromEnv`,
+  `Verify` and `Require`, for Cloudflare Turnstile and Google reCAPTCHA v3. It
+  is switched off until a provider and secret are configured. A missing token is
+  `400 bot_challenge_required`, a rejected one `403 bot_challenge_failed`, and an
+  unreachable provider `503 bot_challenge_unavailable` (unless fail-open is set).
+
+### Compatibility
+
+- Additive. A service that uses it needs outbound HTTPS to the provider's
+  siteverify host.
+
 ## v0.8.0 — plan limits
 
 ### Added
