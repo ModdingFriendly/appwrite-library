@@ -3,6 +3,20 @@
 All notable changes to `github.com/ModdingFriendly/appwrite-library`.
 Versions follow semantic versioning; functions pin a version in `go.mod`.
 
+## v0.6.0 — sealed secrets package
+
+### Added
+
+- **`reparix/sealed` package** — seals server-only secrets for storage:
+  `ParseKey`, `KeyFromEnv`, `Seal`, `Open`, `SealJSON`, `OpenJSON`. It is the
+  code Reparix had copied into `service-messaging` and `service-integrations`
+  (PAR-1201b), with the same envelope and key mapping. Tests open values sealed
+  by both copies, so stored credentials stay readable after the switch.
+
+### Compatibility
+
+- Additive.
+
 ## v0.5.1 — committed rows and bounded read retries
 
 ### Fixed
