@@ -198,6 +198,23 @@ func TestBudgetAlwaysVisitsOneOrganisation(t *testing.T) {
 	}
 }
 
+func TestBudgetIsSharedAndDefersLaterJobs(t *testing.T) {
+	store := &memStore{orgs: []string{"a"}}
+	now := t0
+	slow := Job{Name: "slow", Org: func(string, time.Time, int) (Tally, error) {
+		now = now.Add(11 * time.Second)
+		return Tally{}, nil
+	}}
+	later := Job{Name: "later", Org: func(string, time.Time, int) (Tally, error) {
+		t.Fatal("must be deferred")
+		return Tally{}, nil
+	}}
+	summary := Runner{Service: "svc", Store: store, Now: fixedClock(&now)}.Run(slow, later)
+	if len(summary.Runs) != 1 || len(summary.Deferred) != 1 || summary.Deferred[0] != "later" || len(store.runs) != 1 {
+		t.Fatalf("summary %+v", summary)
+	}
+}
+
 func TestOrderResumesAfterAMissingOrganisation(t *testing.T) {
 	got := Order([]string{"d", "a", "c"}, "b")
 	if !reflect.DeepEqual(got, []string{"c", "d", "a"}) {

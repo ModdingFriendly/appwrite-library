@@ -324,13 +324,14 @@ Runs the jobs of an Appwrite scheduled execution. A service lists its jobs; the
 `Runner` runs the ones that are due according to the shared `job_runs` table
 (`Job.Every`, with a tenth of the interval of slack for cron jitter), visits
 every organisation in a stable order with a per-organisation work bound
-(`Job.Limit`), stops starting organisations once the time `Budget` is spent and
-records where it stopped so the next run continues there. A failing
+(`Job.Limit`), stops starting organisations once the execution's time `Budget`
+(10 s by default, shared by all its jobs) is spent and records where it stopped
+so the next run continues there; a job not reached is deferred. A failing
 organisation is counted and skipped. Each run is recorded as one row with its
 status (`ok`, `partial`, `failed`), counts and a short error code, never request
-data. `AppwriteStore` is the store for a Function execution, and `Purge`
-deletes an organisation's rows older than a cutoff, bounded, ignoring rows that
-are already gone. Jobs must be idempotent.
+data. `AppwriteStore` is the store for a Function execution, and `Purge` deletes
+an organisation's rows older than a cutoff, bounded, ignoring rows that are
+already gone. Jobs must be idempotent.
 
 ## Migrating from v0.3.1
 

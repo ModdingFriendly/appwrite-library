@@ -9,7 +9,7 @@ Versions follow semantic versioning; functions pin a version in `go.mod`.
 
 - **`reparix/jobs` package** — the scheduled-job pattern for Reparix
   (PAR-1307a): `Runner` decides which jobs are due from the `job_runs` run log,
-  bounds the work per organisation and per run, resumes where a cut-short run
+  bounds the work per organisation and the time per execution, resumes where a cut-short run
   stopped, isolates a failing organisation, and records each run. Also
   `AppwriteStore`, `Purge`, `Due`, `Order` and `Describe`.
 - **`appwrite.LessThan`** query builder.

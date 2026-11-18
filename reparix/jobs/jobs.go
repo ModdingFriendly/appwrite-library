@@ -9,8 +9,8 @@
 //
 // A job is written per organisation. The Runner gives each organisation a
 // bounded amount of work (Job.Limit) so one busy organisation cannot use the
-// whole execution, and it stops starting new organisations once the run's time
-// Budget is spent. It records where it stopped, and the next run of that job
+// whole execution, and it stops starting new organisations once the execution's
+// time Budget is spent. It records where it stopped, and the next run of that job
 // starts with the next organisation. An organisation whose work fails is
 // recorded and skipped; the others still run.
 //
@@ -46,8 +46,9 @@ const (
 const (
 	// DefaultLimit is the work bound per organisation when Job.Limit is zero.
 	DefaultLimit = 500
-	// DefaultBudget is the run's time budget when Runner.Budget is zero.
-	DefaultBudget = 20 * time.Second
+	// DefaultBudget is the execution's time budget when Runner.Budget is zero.
+	// Reparix Functions time out after 15 seconds.
+	DefaultBudget = 10 * time.Second
 	// maxError bounds the error text kept in the run log.
 	maxError = 300
 )
@@ -111,7 +112,9 @@ type Runner struct {
 	Store   Store
 	// Now returns the current time. Nil means time.Now in UTC.
 	Now func() time.Time
-	// Budget bounds one job's run time. Zero means DefaultBudget.
+	// Budget bounds the time spent on all jobs of one execution. Zero means
+	// DefaultBudget. A job not started before it is spent is deferred to the
+	// next execution, and a job cut short resumes there.
 	Budget time.Duration
 	// Log receives one line per job. Nil discards it.
 	Log func(string)
@@ -119,14 +122,24 @@ type Runner struct {
 
 // Summary is what one execution did, returned as the execution's response.
 type Summary struct {
-	Runs   []Run    `json:"runs"`
-	NotDue []string `json:"not_due"`
+	Runs     []Run    `json:"runs"`
+	NotDue   []string `json:"not_due"`
+	Deferred []string `json:"deferred"`
 }
 
 // Run runs each job that is due, in order, and records each run.
 func (r Runner) Run(jobs ...Job) Summary {
-	summary := Summary{Runs: []Run{}, NotDue: []string{}}
+	summary := Summary{Runs: []Run{}, NotDue: []string{}, Deferred: []string{}}
+	budget := r.Budget
+	if budget <= 0 {
+		budget = DefaultBudget
+	}
+	deadline := r.now().Add(budget)
 	for _, job := range jobs {
+		if !r.now().Before(deadline) {
+			summary.Deferred = append(summary.Deferred, job.Name)
+			continue
+		}
 		last, found, err := r.Store.LastRun(r.Service, job.Name)
 		if err != nil {
 			// The jobs are idempotent, so running when unsure is the safe side.
@@ -141,7 +154,7 @@ func (r Runner) Run(jobs ...Job) Summary {
 		if found {
 			resume = last.ResumeAfter
 		}
-		run := r.runJob(job, resume)
+		run := r.runJob(job, resume, deadline)
 		if err := r.Store.Record(run); err != nil {
 			r.log(job.Name + ": could not record the run")
 		}
@@ -176,16 +189,12 @@ func Order(orgs []string, resumeAfter string) []string {
 	return append(sorted[start:], sorted[:start]...)
 }
 
-func (r Runner) runJob(job Job, resumeAfter string) Run {
+func (r Runner) runJob(job Job, resumeAfter string, deadline time.Time) Run {
 	started := r.now()
 	run := Run{Service: r.Service, Job: job.Name, StartedAt: started}
 	limit := job.Limit
 	if limit <= 0 {
 		limit = DefaultLimit
-	}
-	budget := r.Budget
-	if budget <= 0 {
-		budget = DefaultBudget
 	}
 
 	orgs, err := r.Store.Organisations()
@@ -197,7 +206,7 @@ func (r Runner) runJob(job Job, resumeAfter string) Run {
 	}
 	ordered := Order(dedupe(orgs), resumeAfter)
 	for i, orgID := range ordered {
-		if i > 0 && r.now().Sub(started) >= budget {
+		if i > 0 && !r.now().Before(deadline) {
 			run.ResumeAfter = ordered[i-1]
 			break
 		}
