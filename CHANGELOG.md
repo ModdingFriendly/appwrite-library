@@ -3,6 +3,33 @@
 All notable changes to `github.com/ModdingFriendly/appwrite-library`.
 Versions follow semantic versioning; functions pin a version in `go.mod`.
 
+## v0.5.1 — committed rows and bounded read retries
+
+### Fixed
+
+- **`reparix/firehose` `Create`/`Update` return the committed row.** Appwrite
+  leaves `$sequence`, `$createdAt` and `$updatedAt` empty on a row written
+  inside a transaction; they are only assigned at commit. Returning the staged
+  row made every gateway mutation hand a client an "incomplete row", so a
+  successful write surfaced as a failed request. The helpers now re-read the row
+  after the transaction commits. The re-read is best effort: the write has
+  already committed, so a failed read is logged and the staged row is returned
+  rather than turning a successful mutation into an error.
+
+### Added
+
+- **Bounded retries for safe reads.** The hardened HTTP client retries `GET`
+  and `HEAD` up to `DefaultRetryAttempts` (3) with exponential backoff on a
+  transport failure (connection reset, EOF, DNS blip) and on the transient
+  statuses 429/502/503/504. Mutations are never replayed: Appwrite cannot tell a
+  retried create from a second one, so a POST still surfaces its error instead
+  of risking duplicate rows.
+
+### Compatibility
+
+- Additive for callers. `Create`/`Update` now return complete rows, which is the
+  shape the gateway contract already documented.
+
 ## v0.5.0 — firehose publisher package
 
 ### Added
