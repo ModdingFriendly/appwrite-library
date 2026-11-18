@@ -266,3 +266,4 @@ func Limit(n int) string                          { return query.Limit(n) }
 func Offset(n int) string                         { return query.Offset(n) }
 func Search(attribute string, value any) string   { return query.Search(attribute, value) }
 func Contains(attribute string, value any) string { return query.Contains(attribute, value) }
+func LessThan(attribute string, value any) string { return query.LessThan(attribute, value) }
