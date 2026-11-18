@@ -308,6 +308,16 @@ Note: a commit that times out or returns an ambiguous acknowledgement may still
 have committed on the server. Callers must keep their own idempotency and
 conflict handling for billing retries and quote decisions.
 
+### `reparix/sealed` — server-only secrets at rest
+
+AES-256-GCM envelopes (`v1:` + base64 of nonce and ciphertext) for secrets a
+Function must read back, such as an organisation's provider credentials. The
+key comes from `SECRET_HASH` (32-byte hex used as is, longer hex reduced with
+SHA-256, or 32-byte base64). The caller passes additional authenticated data
+naming the owner, so a value copied to another organisation or provider does
+not open. `SealJSON`/`OpenJSON` cover the common case; `Seal`/`Open` take an
+explicit key. Errors never include the key, plaintext or envelope.
+
 ## Migrating from v0.3.1
 
 - `money.AbsMoney` now returns `(Money, error)`, matching `NegMoney`. It reports
