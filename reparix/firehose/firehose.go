@@ -458,6 +458,27 @@ func config(ctx openruntimes.Context) (appwrite.Config, error) {
 	return cfg, nil
 }
 
+// committedRow re-reads a row after its transaction has committed.
+//
+// Appwrite leaves the server-generated fields ($sequence, $createdAt,
+// $updatedAt) blank on a row written inside a transaction: they only exist once
+// the transaction commits. A caller that hands the staged row to a browser is
+// handing over a row that fails every "is this a complete row" check, so the
+// committed row is read back instead. Re-reading is best effort: the write has
+// already committed, so a failed read logs and falls back to the staged row
+// rather than turning a successful mutation into an error.
+func committedRow(ctx openruntimes.Context, cfg appwrite.Config, table, rowID string, staged map[string]any) map[string]any {
+	if rowID == "" {
+		return staged
+	}
+	row, err := appwrite.GetWith[map[string]any](ctx, cfg, table, rowID)
+	if err != nil {
+		ctx.Error("firehose: re-read " + table + "/" + rowID + ": " + err.Error())
+		return staged
+	}
+	return *row
+}
+
 // Update writes the change and its event in one transaction. build receives
 // the full row before and after the write.
 func Update(ctx openruntimes.Context, table, rowID string, data map[string]any, build func(before, after map[string]any) Event) (map[string]any, error) {
@@ -484,7 +505,10 @@ func Update(ctx openruntimes.Context, table, rowID string, data map[string]any, 
 		}
 		return Append(t, cfg.DatabaseID, txID, build(before, updated))
 	})
-	return updated, err
+	if err != nil {
+		return nil, err
+	}
+	return committedRow(ctx, cfg, table, rowID, updated), nil
 }
 
 // Delete removes the row and records its event in one transaction.
@@ -527,5 +551,9 @@ func Create(ctx openruntimes.Context, table string, data map[string]any, permiss
 		}
 		return Append(t, cfg.DatabaseID, txID, build(created))
 	})
-	return created, err
+	if err != nil {
+		return nil, err
+	}
+	rowID, _ := created["$id"].(string)
+	return committedRow(ctx, cfg, table, rowID, created), nil
 }
