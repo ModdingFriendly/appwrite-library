@@ -3,6 +3,21 @@
 All notable changes to `github.com/ModdingFriendly/appwrite-library`.
 Versions follow semantic versioning; functions pin a version in `go.mod`.
 
+## v0.7.0 — scheduled jobs
+
+### Added
+
+- **`reparix/jobs` package** — the scheduled-job pattern for Reparix
+  (PAR-1307a): `Runner` decides which jobs are due from the `job_runs` run log,
+  bounds the work per organisation and the time per execution, resumes where a cut-short run
+  stopped, isolates a failing organisation, and records each run. Also
+  `AppwriteStore`, `Purge`, `Due`, `Order` and `Describe`.
+- **`appwrite.LessThan`** query builder.
+
+### Compatibility
+
+- Additive. The consuming project needs the `job_runs` table.
+
 ## v0.6.0 — sealed secrets package
 
 ### Added
