@@ -346,6 +346,45 @@ is unlimited, an organisation without a plan is not limited, an organisation
 already over a limit keeps its data and only new creates are refused, and a
 failure to read the plan or the usage is logged and allowed.
 
+### `apptest` — an in-memory Appwrite for tests
+
+`apptest.New(t)` starts a local HTTP server that answers the Appwrite endpoints
+the services use, so a Function can run end to end in a unit test with no
+network: account and JWT lookup, teams and memberships, users, TablesDB rows
+(list with queries, get, create, upsert, update, delete, bulk, increment),
+transactions with rollback, storage buckets and files (including `view` and
+`download`), and message sends. `Env(t)` points `APPWRITE_*` at it, `AddUser`
+returns a JWT, `Seed`/`Row`/`Rows` set and read rows, and `Snapshot`/`Restore`
+reset state between cases. The server key can do anything; a JWT caller sees
+only its own account and its own teams' memberships and is refused on
+TablesDB, as on Appwrite. Every request is recorded (`Calls`), and an endpoint
+the fake does not implement answers `501` and is listed by `Unhandled`, so a
+test can tell "refused" from "not modelled". `NewTLS` serves HTTPS for code
+that insists on an https endpoint.
+
+### `reparix/isolation` — per-route tenant isolation tests
+
+Builds a two-organisation world on `apptest` from the schema files in `db/`
+(`New(t, Options{DBDir: "../../db"})`): every tenant table gets one plausible
+row per organisation whose text carries that organisation's canary, with
+admin, technician and customer users, a machine API key and a platform
+operator. `Run(t, f, Main, routes)` sends each `Route` as org A aimed at org B
+(placeholders such as `{{tickets}}` name B's rows, `{{own:tickets}}` A's) for
+every role the route serves, and fails when:
+
+- the answer contains B's canary;
+- any B row (or file, or membership) changed;
+- a server-key list or bulk write on a tenant table is not filtered to A's
+  `organization_id` (point lookups by `$id` are allowed; `Unscoped` documents
+  credential lookups such as a public token);
+- the same request claiming B's team in the tenant header is not refused; or
+- the request reached an endpoint the fake does not implement.
+
+Each route is then sent by B's own caller and must succeed (and, with `Reads`,
+return B's data), so a refusal for an unrelated reason never counts as proof.
+`RequireCoverage` fails when a route in `docs/service-ownership.json` has no
+case.
+
 ## Migrating from v0.3.1
 
 - `money.AbsMoney` now returns `(Money, error)`, matching `NegMoney`. It reports

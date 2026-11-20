@@ -3,6 +3,24 @@
 All notable changes to `github.com/ModdingFriendly/appwrite-library`.
 Versions follow semantic versioning; functions pin a version in `go.mod`.
 
+## v0.11.0 — in-memory Appwrite and tenant isolation tests (PAR-1405)
+
+### Added
+
+- **`apptest` package** — an in-memory Appwrite server for unit tests:
+  account/JWT, teams and memberships, users, TablesDB rows with queries,
+  bulk operations and transactions, storage files, and message sends. Records
+  every call and reports endpoints it does not implement.
+- **`reparix/isolation` package** — schema-driven two-organisation fixture and
+  `Run`, which proves per route that an org A caller can neither read nor
+  change org B's data, that lists are filtered to the caller's organisation,
+  and that a forged tenant header is refused; a same-tenant control request
+  must succeed. `RequireCoverage` ties the cases to the route manifest.
+
+### Compatibility
+
+- Additive, test-only packages. No runtime package changed.
+
 ## v0.10.0 — organisation suspension and platform operators (PAR-1301)
 
 ### Added

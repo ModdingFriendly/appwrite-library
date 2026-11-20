@@ -1,0 +1,16 @@
+table: organizations
+enabled: true
+rowSecurity: true
+permissions: []
+columns:
+  - key: team_id
+    type: varchar
+    required: true
+    array: false
+    size: 50
+  - key: organization_id
+    type: varchar
+    required: false
+    array: false
+    size: 50
+indexes: []

@@ -1,0 +1,33 @@
+table: customers
+enabled: true
+rowSecurity: true
+permissions: []
+columns:
+  - key: name
+    type: varchar
+    required: true
+    array: false
+    size: 255
+  - key: email
+    type: varchar
+    required: false
+    array: false
+    size: 255
+  - key: organization_id
+    type: varchar
+    required: true
+    array: false
+    size: 50
+  - key: merged_into_id
+    type: varchar
+    required: false
+    array: false
+    size: 50
+  - key: deleted_at
+    type: datetime
+    required: false
+    array: false
+indexes:
+  - key: idx_org
+    type: key
+    columns: [organization_id]

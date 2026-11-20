@@ -1,0 +1,41 @@
+table: tickets
+enabled: true
+rowSecurity: true
+permissions: []
+columns:
+  - key: device
+    type: varchar
+    required: true
+    array: false
+    size: 255
+  - key: priority
+    type: enum
+    required: true
+    array: false
+    elements:
+      - "Low"
+      - "High"
+  - key: customer_id
+    type: varchar
+    required: false
+    array: false
+    size: 50
+  - key: total
+    type: varchar
+    required: false
+    array: false
+    size: 32
+  - key: tracking_code
+    type: varchar
+    required: false
+    array: false
+    size: 8
+  - key: organization_id
+    type: varchar
+    required: true
+    array: false
+    size: 50
+indexes:
+  - key: uq_tracking
+    type: unique
+    columns: [tracking_code]
