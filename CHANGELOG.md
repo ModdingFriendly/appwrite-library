@@ -3,6 +3,29 @@
 All notable changes to `github.com/ModdingFriendly/appwrite-library`.
 Versions follow semantic versioning; functions pin a version in `go.mod`.
 
+## v0.10.0 — organisation suspension and platform operators (PAR-1301)
+
+### Added
+
+- **`reparix/orgstatus` package** — `Require(store, teamID)` refuses a
+  suspended organisation with `403 organization_suspended` and a deleted one
+  (status `deleted` or `deleted_at` set) with `403 organization_closed`. Status
+  comes from the `organizations` row by `team_id`; empty, unknown or missing
+  means active. Each team's status is cached for 30 seconds in the warm runtime
+  (`Default`), so a suspension applies within a minute. A failed read reuses the
+  last known status, or returns `503 organization_status_unavailable`.
+  `AppwriteStore` reads with the server key; `Checker.Forget` drops a cached team
+  after a change.
+- **`reparix/operator` package** — `Require(ctx, lookup)` verifies the caller's
+  JWT and a confirmed membership of the platform operator team
+  (`reparix-platform-operators`, or `REPARIX_OPERATOR_TEAM_ID`). Tenant roles,
+  including admin and owner, are never operator authority; refusal is
+  `403 operator_required`.
+
+### Compatibility
+
+- Additive. Nothing calls the new packages until a service opts in.
+
 ## v0.9.1 — caller display names on audit events
 
 ### Added
