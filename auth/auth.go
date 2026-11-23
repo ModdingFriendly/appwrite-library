@@ -115,6 +115,10 @@ func (l *JWTLookup) CurrentUser(ctx openruntimes.Context) (*Identity, error) {
 	if err != nil {
 		return nil, err
 	}
+	key := cacheKey(l.cfg, Header(ctx, JWTHeader), "account")
+	if hit, ok := cacheGet(key); ok && hit.identity != nil {
+		return copyIdentity(hit.identity), nil
+	}
 	user, err := account.New(clt).Get()
 	if err != nil {
 		return nil, lookupError(ctx, err, "account")
@@ -125,7 +129,9 @@ func (l *JWTLookup) CurrentUser(ctx openruntimes.Context) (*Identity, error) {
 	if !user.Status {
 		return nil, httpx.Unauthorized("account is disabled", nil)
 	}
-	return &Identity{UserID: user.Id, Name: strings.TrimSpace(user.Name)}, nil
+	identity := &Identity{UserID: user.Id, Name: strings.TrimSpace(user.Name)}
+	cachePut(key, cacheEntry{identity: copyIdentity(identity)})
+	return identity, nil
 }
 
 // Membership lists the membership for userID in teamID using the same JWT.
@@ -147,6 +153,10 @@ func (l *JWTLookup) Membership(ctx openruntimes.Context, teamID, userID string) 
 	if err != nil {
 		return nil, err
 	}
+	key := cacheKey(l.cfg, Header(ctx, JWTHeader), "membership", teamID, userID)
+	if hit, ok := cacheGet(key); ok && hit.membership != nil {
+		return copyMembership(hit.membership), nil
+	}
 	teamsSvc := teams.New(clt)
 	res, err := teamsSvc.ListMemberships(teamID,
 		teamsSvc.WithListMembershipsQueries([]string{
@@ -164,13 +174,19 @@ func (l *JWTLookup) Membership(ctx openruntimes.Context, teamID, userID string) 
 		if m.TeamId != "" && m.TeamId != teamID {
 			continue
 		}
-		return &Membership{
+		membership := &Membership{
 			ID:        m.Id,
 			UserID:    m.UserId,
 			TeamID:    teamID,
 			Roles:     append([]string(nil), m.Roles...),
 			Confirmed: m.Confirm,
-		}, nil
+		}
+		// An unconfirmed membership is refused by policy layers; keep
+		// re-checking it so a confirmation takes effect at once.
+		if membership.Confirmed {
+			cachePut(key, cacheEntry{membership: copyMembership(membership)})
+		}
+		return membership, nil
 	}
 	// The Teams API only returns memberships visible to this caller; not finding
 	// one means the caller is not a member of this team.

@@ -3,6 +3,23 @@
 All notable changes to `github.com/ModdingFriendly/appwrite-library`.
 Versions follow semantic versioning; functions pin a version in `go.mod`.
 
+## v0.12.0 — short-lived sign-in cache
+
+### Added
+
+- **`auth` verification cache** — `JWTLookup.CurrentUser` and
+  `JWTLookup.Membership` reuse a successful lookup for `auth.CacheTTL`
+  (15 seconds by default) in a warm runtime, keyed by endpoint, project,
+  a SHA-256 of the JWT and, for memberships, team and user. A repeat request
+  skips both Appwrite calls. Refusals, errors and unconfirmed memberships are
+  never cached. `auth.ResetCache()` clears it; `auth.CacheTTL = 0` disables it.
+
+### Compatibility
+
+- No API change. A removed membership or disabled account can keep working
+  for up to 15 seconds on a runtime that already verified it (organisation
+  suspension already allows 30 seconds).
+
 ## v0.11.0 — in-memory Appwrite and tenant isolation tests (PAR-1405)
 
 ### Added
