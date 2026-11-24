@@ -3,6 +3,23 @@
 All notable changes to `github.com/ModdingFriendly/appwrite-library`.
 Versions follow semantic versioning; functions pin a version in `go.mod`.
 
+## v0.13.0 — provider credential context sealing (PAR-1201b)
+
+### Added
+
+- **`reparix/credentials` package** — context-aware integration and messaging
+  JSON sealing: `SealIntegrationJSON`/`OpenIntegrationJSON`
+  (`credentials|<team>|<provider>`) and
+  `SealMessagingJSON`/`OpenMessagingJSON`
+  (`reparix:messaging:v1:<team>:<channel>:<provider>`).
+
+### Compatibility
+
+- Preserves the historical integration and messaging AAD strings, `SECRET_HASH`
+  parsing, JSON encoding and the `v1:` AES-GCM envelope. Changing either AAD
+  contract would make existing stored values undecryptable. The package wraps
+  `reparix/sealed`; no existing API changed.
+
 ## v0.12.0 — short-lived sign-in cache
 
 ### Added
